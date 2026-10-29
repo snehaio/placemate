@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PlaceMate: Placement Portal Prototype</title>
+<style>
+:root{--bg:#f3f6f8;--card:#fff;--tx:#14213d;--mu:#5b6675;--pr:#0f6e72;--on:#fff;--ac:#e1f0f0;--bd:#d6dde3;--wa:#9a5b00;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1621;--card:#16212f;--tx:#e6ecf3;--mu:#97a3b3;--pr:#4fc3c7;--on:#0e1621;--ac:#1d3a40;--bd:#2a3a4d;--wa:#e5ad5c}}
+:root[data-theme="dark"]{--bg:#0e1621;--card:#16212f;--tx:#e6ecf3;--mu:#97a3b3;--pr:#4fc3c7;--on:#0e1621;--ac:#1d3a40;--bd:#2a3a4d;--wa:#e5ad5c}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--tx)}
+main{max-width:720px;margin:0 auto;padding:12px 14px 28px}
+h1,h2{font-family:Georgia,"Times New Roman",serif;margin:0}
+h2{font-size:20px;margin-bottom:10px}
+header{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0 10px}
+h1{font-size:24px;color:var(--pr)}
+nav{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px}
+nav button{white-space:nowrap;background:var(--ac);color:var(--tx)}
+nav button.on{background:var(--pr);color:var(--on)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;margin:10px 0}
+.soon{border-style:dashed}
+button,select,input{font:inherit}
+button{background:var(--pr);color:var(--on);border:0;border-radius:8px;padding:8px 14px;cursor:pointer}
+button.ghost{background:var(--ac);color:var(--tx)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--pr);outline-offset:2px}
+input,select{width:100%;box-sizing:border-box;padding:9px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx);margin:3px 0 10px}
+label{font-size:13px;color:var(--mu)}
+.badge{display:inline-block;padding:2px 10px;border-radius:99px;background:var(--ac);font-size:12px}
+.mu{color:var(--mu);font-size:13px}
+.row{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}
+#note{min-height:20px;color:var(--wa);font-size:13px}
+.st{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+</style>
+</head>
+<body>
+<main>
+<div id="app"></div>
+<div id="note" role="status"></div>
+<div class="card">
+<b>Build status</b>
+<div class="st">
+<span class="badge">Done: login and roles</span><span class="badge">Done: student profile</span><span class="badge">Done: job posting</span><span class="badge">Done: apply and track</span>
+<span class="badge" style="color:var(--wa)">In progress: mock tests</span><span class="badge" style="color:var(--wa)">In progress: resume builder</span><span class="badge" style="color:var(--wa)">In progress: analytics</span>
+</div>
+</div>
+</main>
+<script>
+const KEY="pm_db",STAT=["Applied","Shortlisted","Interview scheduled","Selected","Rejected"];
+const today=new Date().toISOString().slice(0,10);
+let mem=null,authMode="login",regRole="student",tab="";
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const csv=(s,up)=>s.split(",").map(x=>up?x.trim().toUpperCase():x.trim().toLowerCase()).filter(Boolean);
+const $=id=>document.getElementById(id);
+function seed(){return{session:0,nid:10,
+users:[{id:1,role:"recruiter",name:"Acme Tech HR",email:"hr@acme.com",pw:"demo123",company:"Acme Tech"},
+{id:2,role:"student",name:"Demo Student",email:"student@demo.com",pw:"demo123",branch:"IT",cgpa:8.2,skills:["javascript","react","sql"]}],
+jobs:[{id:1,rid:1,company:"Acme Tech",title:"Frontend Intern",skills:["react","javascript"],minCgpa:7,branches:["IT","CSE"],deadline:"2026-12-31"},
+{id:2,rid:1,company:"Acme Tech",title:"Backend Developer",skills:["node","mongodb","sql"],minCgpa:7.5,branches:["IT","CSE","ECE"],deadline:"2026-12-15"}],apps:[]}}
+function load(){try{const s=localStorage.getItem(KEY);if(s)return JSON.parse(s)}catch(e){}return mem||seed()}
+let db=load();
+function save(){mem=db;try{localStorage.setItem(KEY,JSON.stringify(db))}catch(e){}}
+const me=()=>db.users.find(u=>u.id===db.session);
+function say(m){$("note").textContent=m}
+
+function authView(){const reg=authMode==="register";
+return `<header><h1>PlaceMate</h1></header><div class="card"><h2>${reg?"Create your account":"Log in"}</h2>`+
+(reg?`<label>I am a</label><select id="role" onchange="regRole=this.value;render()"><option value="student"${regRole==="student"?" selected":""}>Student</option><option value="recruiter"${regRole==="recruiter"?" selected":""}>Recruiter</option></select><label>Full name</label><input id="nm">`:"")+
+`<label>Email</label><input id="em" type="email"><label>Password</label><input id="pw" type="password">`+
+(reg&&regRole==="student"?`<label>Branch</label><input id="br" placeholder="IT"><label>CGPA</label><input id="cg" type="number" step="0.1" min="0" max="10">`:"")+
+(reg&&regRole==="recruiter"?`<label>Company</label><input id="co">`:"")+
+`<button onclick="auth()">${reg?"Register":"Log in"}</button> <button class="ghost" onclick="authMode='${reg?"login":"register"}';render()">${reg?"I have an account":"Create an account"}</button>
+<p class="mu">Demo logins: student@demo.com or hr@acme.com, password demo123</p></div>`}
+function auth(){const e=$("em").value.trim().toLowerCase(),p=$("pw").value;
+if(authMode==="login"){const u=db.users.find(x=>x.email===e&&x.pw===p);if(!u)return say("Email or password is incorrect.");db.session=u.id}
+else{const nm=$("nm").value.trim();if(!nm||!e||p.length<6)return say("Fill every field. Password needs at least 6 characters.");
+if(db.users.some(x=>x.email===e))return say("This email is already registered.");
+const u={id:db.nid++,role:regRole,name:nm,email:e,pw:p};
+if(regRole==="student"){u.branch=($("br").value.trim()||"IT").toUpperCase();u.cgpa=+$("cg").value||0;u.skills=[]}else u.company=$("co").value.trim()||nm;
+db.users.push(u);db.session=u.id}
+save();tab="";render()}
+function logout(){db.session=0;save();tab="";render()}
+
+function profileView(u){return `<div class="card"><h2>Your profile</h2><label>Branch</label><input id="br" value="${esc(u.branch)}"><label>CGPA</label><input id="cg" type="number" step="0.1" min="0" max="10" value="${esc(u.cgpa)}"><label>Skills (comma separated)</label><input id="sk" value="${esc(u.skills.join(", "))}"><button onclick="saveProfile()">Save profile</button><p class="mu">Your skills and CGPA decide which jobs you are eligible for and your match score.</p></div>`}
+function saveProfile(){const u=me();u.branch=$("br").value.trim().toUpperCase();u.cgpa=+$("cg").value||0;u.skills=csv($("sk").value);save();say("Profile saved.")}
+
+function jobsView(u){const mine=db.apps.filter(a=>a.sid===u.id).map(a=>a.jid);
+const list=db.jobs.map(j=>({j,m:Math.round(100*j.skills.filter(s=>u.skills.includes(s)).length/(j.skills.length||1))})).sort((a,b)=>b.m-a.m);
+return list.map(({j,m})=>{let why="";
+if(u.cgpa<j.minCgpa)why="your CGPA is below "+j.minCgpa;else if(j.branches.length&&!j.branches.includes(u.branch))why="your branch is not listed";else if(j.deadline<today)why="the deadline has passed";
+const btn=mine.includes(j.id)?`<span class="badge">Applied</span>`:why?`<span class="mu">Not eligible: ${why}</span>`:`<button onclick="apply(${j.id})">Apply</button>`;
+return `<div class="card"><div class="row"><div><b>${esc(j.title)}</b><div class="mu">${esc(j.company)}. Minimum CGPA ${j.minCgpa}. Branches: ${esc(j.branches.join(", ")||"all")}</div><div class="mu">Skills: ${esc(j.skills.join(", "))}. Apply by ${esc(j.deadline)}</div></div><span class="badge">${m}% match</span></div><div style="margin-top:8px">${btn}</div></div>`}).join("")||`<p class="mu">No jobs are posted yet.</p>`}
+function apply(id){const u=me();if(db.apps.some(a=>a.sid===u.id&&a.jid===id))return;db.apps.push({id:db.nid++,sid:u.id,jid:id,status:"Applied",on:today});save();render();say("Application submitted.")}
+function appsView(u){const as=db.apps.filter(a=>a.sid===u.id);
+return as.map(a=>{const j=db.jobs.find(x=>x.id===a.jid);return `<div class="card row"><div><b>${esc(j.title)}</b><div class="mu">${esc(j.company)}. Applied on ${esc(a.on)}</div></div><span class="badge">${esc(a.status)}</span></div>`}).join("")||`<p class="mu">You have not applied anywhere yet. Open the Jobs tab to start.</p>`}
+
+function postView(){return `<div class="card"><h2>Post a job</h2><label>Job title</label><input id="jt"><label>Required skills (comma separated)</label><input id="js"><label>Minimum CGPA</label><input id="jc" type="number" step="0.1" min="0" max="10"><label>Eligible branches (comma separated, blank for all)</label><input id="jb" placeholder="IT, CSE"><label>Last date to apply</label><input id="jd" type="date"><button onclick="postJob()">Post job</button></div>`}
+function postJob(){const u=me(),t=$("jt").value.trim();if(!t)return say("Enter a job title.");
+db.jobs.push({id:db.nid++,rid:u.id,company:u.company,title:t,skills:csv($("js").value),minCgpa:+$("jc").value||0,branches:csv($("jb").value,1),deadline:$("jd").value||"2026-12-31"});
+save();tab="mine";render();say("Job posted.")}
+function mineView(u){return db.jobs.filter(j=>j.rid===u.id).map(j=>{const as=db.apps.filter(a=>a.jid===j.id);
+return `<div class="card"><b>${esc(j.title)}</b> <span class="mu">${as.length} applicant(s)</span>`+as.map(a=>{const s=db.users.find(x=>x.id===a.sid);
+return `<div class="row" style="margin-top:8px"><div>${esc(s.name)}<div class="mu">${esc(s.branch)}. CGPA ${esc(s.cgpa)}. ${esc(s.skills.join(", "))}</div></div><select style="width:auto" onchange="setStatus(${a.id},this.value)">${STAT.map(x=>`<option${x===a.status?" selected":""}>${x}</option>`).join("")}</select></div>`}).join("")+`</div>`}).join("")||`<p class="mu">You have not posted a job yet. Use the Post a job tab.</p>`}
+function setStatus(id,v){db.apps.find(a=>a.id===id).status=v;save();say("Status updated.")}
+
+const soon=(t,d)=>`<div class="card soon"><h2>${t}</h2><p>${d}</p><span class="badge" style="color:var(--wa)">In progress</span></div>`;
+function render(){const u=me(),app=$("app");say("");
+if(!u){app.innerHTML=authView();return}
+const st=u.role==="student";
+const tabs=st?[["profile","Profile"],["jobs","Jobs"],["apps","My applications"],["mock","Mock tests"],["resume","Resume"]]:[["post","Post a job"],["mine","My postings"],["stats","Analytics"]];
+if(!tabs.some(t=>t[0]===tab))tab=st?"jobs":"mine";
+const V={profile:()=>profileView(u),jobs:()=>jobsView(u),apps:()=>appsView(u),post:postView,mine:()=>mineView(u),
+mock:()=>soon("Mock tests","Timed aptitude and technical tests with automatic scoring. The question bank and scoring logic are being built."),
+resume:()=>soon("Resume builder","Structured resume form with PDF export. Upload and parsing come after the form."),
+stats:()=>soon("Analytics","Drive-wise and branch-wise placement numbers for the placement cell.")};
+app.innerHTML=`<header><h1>PlaceMate</h1><div><span class="mu">${esc(u.name)} (${u.role})</span> <button class="ghost" onclick="logout()">Log out</button></div></header><nav>${tabs.map(t=>`<button class="${t[0]===tab?"on":""}" onclick="tab='${t[0]}';render()">${t[1]}</button>`).join("")}</nav>${V[tab]()}`}
+render();
+</script>
+</body>
+</html>
